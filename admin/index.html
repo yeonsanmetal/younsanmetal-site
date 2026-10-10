@@ -34,6 +34,10 @@
   .status button { padding: 12px 4px; border: 1.5px solid var(--line); background: #fff; color: var(--steel); }
   .status button[aria-pressed=true] { background: var(--steel); border-color: var(--steel); color: #fff; font-weight: 700; }
   .empty { background: #fff; padding: 24px; border-radius: 4px; }
+  .src { display: inline-block; font-size: 14px; background: var(--zinc); padding: 2px 8px; border-radius: 3px; margin-top: 4px; }
+  .sources { background: #fff; border-radius: 4px; padding: 14px 18px; margin-bottom: 16px; font-size: 15px; }
+  .sources h2 { font-size: 15px; margin: 0 0 6px; }
+  .sources ul { margin: 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 16px; }
 </style>
 </head>
 <body>
@@ -54,6 +58,7 @@
       <button class="ghost" id="logout" type="button">잠그기</button>
     </div>
     <p class="err" id="box-err" role="alert"></p>
+    <div class="sources" id="sources" hidden><h2>어디서 보고 문의했나요</h2><ul id="source-list"></ul></div>
     <div id="list"></div>
   </section>
 </main>
@@ -83,7 +88,39 @@
     $('pw').value = ''; $('pw').focus();
   }
 
+  // 유입 경로를 사람이 읽는 말로: UTM이 있으면 그 값, 없으면 들어온 사이트, 둘 다 없으면 직접 방문
+  const SOURCE_NAMES = { namecard: '명함', catalog: '카탈로그', naver: '네이버', referral: '지인 소개', kakao: '카카오톡', instagram: '인스타그램', blog: '블로그' };
+  const MEDIUM_NAMES = { qr: 'QR', cpc: '광고', social: 'SNS', message: '메시지', print: '인쇄물' };
+  function sourceLabel(r) {
+    if (r.utm_source) {
+      const s = SOURCE_NAMES[r.utm_source] || r.utm_source;
+      const m = r.utm_medium ? ' ' + (MEDIUM_NAMES[r.utm_medium] || r.utm_medium) : '';
+      return s + m + (r.utm_campaign ? ` (${r.utm_campaign})` : '');
+    }
+    if (r.referrer) {
+      try {
+        const h = new URL(r.referrer).hostname.replace(/^www\./, '');
+        if (/naver\./.test(h)) return '네이버 (검색·블로그)';
+        if (/google\./.test(h)) return '구글 검색';
+        if (/daum\.|kakao/.test(h)) return '다음·카카오';
+        return h;
+      } catch { return '다른 사이트'; }
+    }
+    return '직접 방문';
+  }
+
+  function renderSources(rows) {
+    const counts = {};
+    for (const r of rows) { const k = sourceLabel(r); counts[k] = (counts[k] || 0) + 1; }
+    const ul = $('source-list'); ul.textContent = '';
+    for (const [k, n] of Object.entries(counts).sort((a, b) => b[1] - a[1])) {
+      const li = document.createElement('li'); li.textContent = `${k} ${n}건`; ul.append(li);
+    }
+    $('sources').hidden = !rows.length;
+  }
+
   function render(rows) {
+    renderSources(rows);
     $('new-count').textContent = rows.filter((r) => r.status === '새 문의').length;
     $('total').textContent = `전체 ${rows.length}건 · 최신순`;
     const list = $('list'); list.textContent = '';
@@ -98,6 +135,7 @@
         try { await navigator.clipboard.writeText(row.contact); contact.textContent = row.contact + ' (복사됨)'; setTimeout(() => (contact.textContent = row.contact), 1500); }
         catch { const s = getSelection(); const rg = document.createRange(); rg.selectNodeContents(contact); s.removeAllRanges(); s.addRange(rg); }
       });
+      const src = document.createElement('div'); src.className = 'src'; src.textContent = '유입: ' + sourceLabel(row);
       const msg = document.createElement('p'); msg.className = 'msg'; msg.textContent = row.message || '(제품·수량 없음)';
       const st = document.createElement('div'); st.className = 'status';
       for (const s of STATUSES) {
@@ -108,7 +146,7 @@
         });
         st.append(b);
       }
-      card.append(meta, name, contact, msg, st);
+      card.append(meta, name, contact, src, msg, st);
       list.append(card);
     }
   }

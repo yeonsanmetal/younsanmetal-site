@@ -302,6 +302,26 @@
 </footer>
 
 <script>
+  // 유입 경로 기억: 링크의 utm_* 값(없으면 다른 사이트에서 온 주소)을 30일 동안 기억했다가 문의에 함께 보낸다
+  const UTM_KEY = 'ym-utm';
+  const UTM_FIELDS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content'];
+  const readUtm = () => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(UTM_KEY) || 'null');
+      if (saved && Date.now() - saved.at < 30 * 864e5) return saved;
+    } catch {}
+    return null;
+  };
+  (() => {
+    const q = new URLSearchParams(location.search);
+    const fromLink = Object.fromEntries(UTM_FIELDS.filter((k) => q.get(k)).map((k) => [k, q.get(k).slice(0, 200)]));
+    let ref = '';
+    try { if (document.referrer && new URL(document.referrer).host !== location.host) ref = document.referrer.slice(0, 200); } catch {}
+    if (!Object.keys(fromLink).length && (!ref || readUtm())) return; // 새로 기억할 게 없으면 이전 기록 유지
+    const data = { ...fromLink, referrer: ref, landing: (location.pathname + location.search).slice(0, 200), at: Date.now() };
+    try { localStorage.setItem(UTM_KEY, JSON.stringify(data)); } catch {}
+  })();
+
   const form = document.getElementById('inquiry-form');
   const msg = document.getElementById('f-msg');
   form.addEventListener('submit', async (e) => {
@@ -313,6 +333,7 @@
       message: form.message.value.trim(),
       website: form.website.value,
       consent: document.getElementById('f-consent').checked,
+      utm: (({ at, ...rest }) => rest)(readUtm() || {}),
     };
     msg.className = 'msg';
     if (!data.name || !data.contact) { msg.textContent = '이름과 연락처를 적어 주세요.'; msg.classList.add('err'); return; }
