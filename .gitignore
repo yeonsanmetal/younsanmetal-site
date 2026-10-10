@@ -2,3 +2,7 @@
 .vercel
 node_modules
 .claude
+
+# Vercel 연동이 자동으로 추가한 에이전트 파일
+.agents
+skills-lock.json
